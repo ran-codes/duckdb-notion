@@ -1,0 +1,199 @@
+---
+title: "DuckDB Notion Extension - Donut Shop Test"
+format: html
+---
+
+# Testing DuckDB Notion Extension
+
+This notebook tests the DuckDB Notion extension with the traditional donut shop database setup.
+
+## Setup
+
+Load required libraries and environment variables:
+
+```{r setup}
+#| warning: false
+#| message: false
+
+# Install packages if needed (run once)
+# install.packages("dotenv")
+# install.packages("duckdb")
+
+# Load libraries
+library(dotenv)
+library(duckdb)
+
+# Load environment variables from .env file
+load_dot_env("../.env")
+
+# Get credentials
+notion_token <- Sys.getenv("NOTION_TOKEN")
+products_db <- Sys.getenv("NOTION_PRODUCTS_DB")
+orders_db <- Sys.getenv("NOTION_ORDERS_DB")
+order_items_db <- Sys.getenv("NOTION_ORDER_ITEMS_DB")
+suppliers_db <- Sys.getenv("NOTION_SUPPLIERS_DB")
+
+# Verify token is loaded
+if (notion_token == "" || notion_token == "your_actual_token_here") {
+  stop("❌ Please set your NOTION_TOKEN in the .env file!")
+} else {
+  cat("✅ Notion token loaded successfully\n")
+}
+
+# Display database IDs (for verification)
+cat("\n📊 Database IDs:\n")
+cat("Products: ", products_db, "\n")
+cat("Orders: ", orders_db, "\n")
+cat("Order Items: ", order_items_db, "\n")
+cat("Suppliers: ", suppliers_db, "\n")
+```
+
+## Connect to DuckDB
+
+```{r connect}
+# Create DuckDB connection
+con <- dbConnect(duckdb::duckdb())
+
+cat("✅ DuckDB connection established\n")
+```
+
+## Install and Load Notion Extension
+
+### How it Works (Like VS Code Extensions)
+
+Just like VS Code extensions create a `.vsix` file, DuckDB extensions create a `.duckdb_extension` file:
+
+1. **Build** the extension → Creates `notion.duckdb_extension`
+2. **Load** it in DuckDB → `LOAD './build/release/notion.duckdb_extension'`
+3. **Use** it → Query Notion databases!
+
+### Option 1: Load Local Build (For Testing)
+
+```{r load-local}
+#| eval: false
+
+# Path to your built extension
+# After running: cmake .. && make (see README.md ## Building the Extension Locally)
+extension_path <- normalizePath("../build/release/notion.duckdb_extension")
+
+# Check if extension exists
+if (file.exists(extension_path)) {
+  dbExecute(con, sprintf("LOAD '%s'", extension_path))
+  cat("✅ Notion extension loaded from:", extension_path, "\n")
+} else {
+  stop("❌ Extension not found! Build it first:\n",
+       "  cd build/release\n",
+       "  cmake -DDUCKDB_PATH=../../../duckdb ../..\n",
+       "  make\n")
+}
+```
+
+### Option 2: From Community (Future)
+
+```{r load-community}
+#| eval: false
+
+# This will work once published to DuckDB community extensions
+dbExecute(con, "INSTALL notion FROM community")
+dbExecute(con, "LOAD notion")
+```
+
+### Current Status
+
+```{r status}
+# Check if extension is built
+ext_path <- "../build/release/notion.duckdb_extension"
+
+if (file.exists(ext_path)) {
+  cat("✅ Extension file found!\n")
+  cat("📁 Location:", normalizePath(ext_path), "\n")
+  cat("💡 Uncomment the 'load-local' chunk above to use it\n")
+} else {
+  cat("❌ Extension not built yet\n\n")
+  cat("📋 Build Instructions:\n")
+  cat("1. Clone DuckDB: git clone https://github.com/duckdb/duckdb.git\n")
+  cat("2. Build DuckDB: cd duckdb && make && cd ..\n")
+  cat("3. Build extension:\n")
+  cat("   cd duckdb_notion\n")
+  cat("   mkdir -p build/release && cd build/release\n")
+  cat("   cmake -DCMAKE_BUILD_TYPE=Release -DDUCKDB_PATH=../../../duckdb ../..\n")
+  cat("   make\n")
+  cat("\nSee README.md ## Building the Extension Locally for details\n")
+}
+```
+
+## Test 1: Query Products Database
+
+This is the main test - pull all products from your Notion database.
+
+```{r query-products}
+#| eval: false
+
+# Once extension is loaded, this will work:
+query <- sprintf("SELECT * FROM read_notion('%s')", products_db)
+
+# Execute query
+products <- dbGetQuery(con, query)
+
+# Display results
+print(products)
+
+# Summary
+cat("\n📊 Products Summary:\n")
+cat("Total products: ", nrow(products), "\n")
+cat("\nColumns: ", paste(names(products), collapse=", "), "\n")
+```
+
+## Expected Output
+
+When the extension works, you should see:
+
+- 6 donut products
+- Columns: name, category, price, cost, in_stock, daily_limit, calories
+- Products like: Glazed Classic, Chocolate Frosted, Jelly Filled, etc.
+
+## Simulated Test (Remove when extension works)
+
+```{r simulated}
+# Simulated data for testing the notebook structure
+simulated_products <- data.frame(
+  name = c("Glazed Classic", "Chocolate Frosted", "Jelly Filled",
+           "Boston Cream", "Pumpkin Spice", "Maple Bacon"),
+  category = c("Classic", "Classic", "Filled", "Filled", "Seasonal", "Specialty"),
+  price = c(2.50, 2.75, 3.00, 3.25, 3.50, 4.00),
+  cost = c(0.75, 0.85, 1.00, 1.20, 1.30, 1.50),
+  in_stock = c(TRUE, TRUE, TRUE, TRUE, FALSE, TRUE),
+  daily_limit = c(200, 150, 100, 80, 0, 50),
+  calories = c(250, 280, 320, 340, 310, 380)
+)
+
+print(simulated_products)
+
+# Calculate profit margins
+simulated_products$profit <- simulated_products$price - simulated_products$cost
+simulated_products$margin_pct <- round(100 * simulated_products$profit / simulated_products$price, 1)
+
+cat("\n💰 Profit Analysis:\n")
+print(simulated_products[, c("name", "price", "cost", "profit", "margin_pct")])
+```
+
+## Cleanup
+
+```{r cleanup}
+# Disconnect from DuckDB
+dbDisconnect(con, shutdown=TRUE)
+cat("✅ Disconnected from DuckDB\n")
+```
+
+## Next Steps
+
+1. ✅ Set up .env file with your Notion token
+2. ✅ Verify database IDs are correct
+3. 🔄 Build the DuckDB Notion extension (see README.md)
+4. 🔄 Load the extension in this notebook
+5. 🔄 Run the actual query against Notion
+6. 🔄 Verify data matches what's in Notion
+
+---
+
+**Note:** This notebook is ready to test once the DuckDB Notion extension is compiled and available!
